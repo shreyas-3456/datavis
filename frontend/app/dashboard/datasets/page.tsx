@@ -6,10 +6,11 @@ import { useDatasets } from "@/lib/hooks/useDatasets";
 import { DatasetDropzone } from "@/components/datasets/DatasetDropzone";
 import { DatasetCard } from "@/components/datasets/DatasetCard";
 import { DatasetPreviewDrawer } from "@/components/datasets/DatasetPreviewDrawer";
+import SeedDatasetBrowser from "@/components/datasets/SeedDatasetBrowser";
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptyState() {
+function EmptyState({ onBrowse }: { onBrowse: () => void }) {
   return (
     <div style={{
       display: "flex",
@@ -29,7 +30,21 @@ function EmptyState() {
         No datasets yet
       </p>
       <p style={{ fontSize: 13, margin: 0 }}>
-        Upload a CSV, Excel, or JSON file above to get started
+        Upload a file or{" "}
+        <button
+          onClick={onBrowse}
+          style={{
+            color: "hsl(220 13% 72%)",
+            textDecoration: "underline",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontSize: "inherit",
+            padding: 0,
+          }}
+        >
+          browse sample datasets
+        </button>
       </p>
     </div>
   );
@@ -66,8 +81,7 @@ function SkeletonCard() {
 
 function skeletonStyle(width: number, height: number): React.CSSProperties {
   return {
-    width,
-    height,
+    width, height,
     borderRadius: 6,
     background: "hsl(220 13% 18%)",
     animation: "pulse 1.6s ease-in-out infinite",
@@ -76,13 +90,19 @@ function skeletonStyle(width: number, height: number): React.CSSProperties {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+type Panel = "none" | "upload" | "seeds";
+
 export default function DatasetsPage() {
   const { data, isLoading, isError, refetch } = useDatasets();
   const [previewDataset, setPreviewDataset] = useState<Dataset | null>(null);
-  const [showUpload, setShowUpload] = useState(true);
+  const [panel, setPanel] = useState<Panel>("upload");
 
   const datasets = data?.items ?? [];
   const total = data?.total ?? 0;
+
+  function togglePanel(p: Panel) {
+    setPanel((cur) => (cur === p ? "none" : p));
+  }
 
   return (
     <div style={{
@@ -118,36 +138,44 @@ export default function DatasetsPage() {
             Datasets
           </h1>
           <p style={{ fontSize: 13, color: "hsl(220 13% 50%)", margin: 0 }}>
-            {total > 0 ? `${total} dataset${total !== 1 ? "s" : ""}` : "Upload files to start analysing"}
+            {total > 0 ? `${total} dataset${total !== 1 ? "s" : ""}` : "Upload files or browse sample datasets"}
           </p>
         </div>
 
-        <button
-          onClick={() => setShowUpload((v) => !v)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            fontSize: 13,
-            fontWeight: 500,
-            padding: "8px 16px",
-            borderRadius: 9,
-            border: "1px solid hsl(220 13% 26%)",
-            background: showUpload ? "hsl(220 13% 18%)" : "transparent",
-            color: showUpload ? "hsl(220 13% 85%)" : "hsl(220 13% 52%)",
-            cursor: "pointer",
-            transition: "background 150ms, color 150ms",
-          }}
-        >
-          <UploadToggleIcon />
-          {showUpload ? "Hide uploader" : "Upload dataset"}
-        </button>
+        {/* Toggle buttons */}
+        <div style={{ display: "flex", gap: 8 }}>
+          <HeaderButton
+            active={panel === "seeds"}
+            onClick={() => togglePanel("seeds")}
+            icon={<SamplesIcon />}
+            label={panel === "seeds" ? "Hide samples" : "Browse samples"}
+          />
+          <HeaderButton
+            active={panel === "upload"}
+            onClick={() => togglePanel("upload")}
+            icon={<UploadIcon />}
+            label={panel === "upload" ? "Hide uploader" : "Upload dataset"}
+          />
+        </div>
       </div>
 
-      {/* ── Dropzone ── */}
-      {showUpload && (
+      {/* ── Upload panel ── */}
+      {panel === "upload" && (
         <div style={{ marginBottom: 32 }}>
           <DatasetDropzone onUploaded={() => refetch()} />
+        </div>
+      )}
+
+      {/* ── Seed browser panel ── */}
+      {panel === "seeds" && (
+        <div style={{
+          marginBottom: 32,
+          background: "hsl(220 13% 10%)",
+          border: "1px solid hsl(220 13% 18%)",
+          borderRadius: 14,
+          padding: "20px 24px",
+        }}>
+          <SeedDatasetBrowser onClose={() => setPanel("none")} />
         </div>
       )}
 
@@ -178,7 +206,7 @@ export default function DatasetsPage() {
           {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
         </div>
       ) : datasets.length === 0 ? (
-        <EmptyState />
+        <EmptyState onBrowse={() => setPanel("seeds")} />
       ) : (
         <div style={gridStyle}>
           {datasets.map((dataset) => (
@@ -200,13 +228,43 @@ export default function DatasetsPage() {
   );
 }
 
-const gridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
-  gap: 16,
-};
+// ── Shared header button ──────────────────────────────────────────────────────
 
-function UploadToggleIcon() {
+function HeaderButton({
+  active, onClick, icon, label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 7,
+        fontSize: 13,
+        fontWeight: 500,
+        padding: "8px 16px",
+        borderRadius: 9,
+        border: "1px solid hsl(220 13% 26%)",
+        background: active ? "hsl(220 13% 18%)" : "transparent",
+        color: active ? "hsl(220 13% 85%)" : "hsl(220 13% 52%)",
+        cursor: "pointer",
+        transition: "background 150ms, color 150ms",
+      }}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+// ── Icons ─────────────────────────────────────────────────────────────────────
+
+function UploadIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M7 10V4M4 7l3-3 3 3" />
@@ -214,3 +272,20 @@ function UploadToggleIcon() {
     </svg>
   );
 }
+
+function SamplesIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="1" width="5" height="5" rx="1" />
+      <rect x="8" y="1" width="5" height="5" rx="1" />
+      <rect x="1" y="8" width="5" height="5" rx="1" />
+      <rect x="8" y="8" width="5" height="5" rx="1" />
+    </svg>
+  );
+}
+
+const gridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
+  gap: 16,
+};

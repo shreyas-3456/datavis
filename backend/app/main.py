@@ -8,6 +8,7 @@ from app.core.middleware import LoggingMiddleware
 from app.api.v1.api import router as api_router
 from app.db.session import engine
 from app.db.base import Base
+from app.db.duckdb import _get_conn, close_duck
 
 
 @asynccontextmanager
@@ -18,12 +19,13 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     logger.info("✅ Database tables ready", extra={"event": "db_ready"})
     logger.info("🚀 Server is live", extra={"event": "server_live"})
-
+    _get_conn()    # warm the DuckDB connection at boot
     yield
 
     # Shutdown
     logger.info("🛑 Shutting down...", extra={"event": "shutdown"})
     await engine.dispose()
+    close_duck()
     logger.info("✅ DB connections closed", extra={"event": "db_closed"})
 
 def create_app() -> FastAPI:

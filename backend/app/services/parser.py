@@ -133,13 +133,15 @@ def _detect_outliers(df: pd.DataFrame, schema: list[ColumnSchema]) -> dict[str, 
 # ── Public API ────────────────────────────────────────────────────────────────
 
 class ParseResult:
-    def __init__(
+     def __init__(
         self,
+        df: pd.DataFrame,        
         row_count: int,
         column_count: int,
         schema: list[ColumnSchema],
         stats: dict[str, Any],
     ):
+        self.df = df            
         self.row_count = row_count
         self.column_count = column_count
         self.schema = schema
@@ -183,6 +185,7 @@ def parse_file(file_path: str, file_type: str) -> ParseResult:
     )
 
     return ParseResult(
+         df=df, 
         row_count=len(df),
         column_count=len(df.columns),
         schema=column_schemas,

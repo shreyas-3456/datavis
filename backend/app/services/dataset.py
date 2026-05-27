@@ -19,7 +19,7 @@ from app.core.logger import logger
 from app.models.dataset import Dataset, DatasetStatus
 from app.schemas.dataset import DatasetRead, DatasetList
 from app.services.parser import parse_file, preview_file
-
+from app.services.duckdb_ingest import ingest_dataframe
 
 ALLOWED_EXTENSIONS = {
     "text/csv": "csv",
@@ -188,3 +188,74 @@ async def delete_dataset(db: AsyncSession, user_id: UUID, dataset_id: UUID) -> N
     if file_path.exists():
         file_path.unlink()
     logger.info("Dataset deleted", extra={"dataset_id": str(dataset_id)})
+
+
+
+    #=========================DUCKDB=====================
+
+    # app/services/dataset.py
+async def upload_dataset(
+    db: AsyncSession,
+    user_id: UUID,
+    file: UploadFile,
+    name: str | None = None,
+) -> DatasetRead:
+    file_type = _detect_file_type(file.filename or "", file.content_type or "")
+
+    dataset_id = uuid.uuid4()
+    upload_dir = _upload_dir() / str(user_id)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    file_path = upload_dir / f"{dataset_id}{Path(file.filename or 'upload').suffix}"
+
+    size = 0
+    with open(file_path, "wb") as f:
+        while chunk := await file.read(1024 * 64):
+            size += len(chunk)
+            if size > MAX_FILE_SIZE:
+                f.close()
+                file_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="File exceeds 100 MB limit.",
+                )
+            f.write(chunk)
+
+    dataset_name = name or Path(file.filename or "Untitled").stem
+
+    dataset = Dataset(
+        id=dataset_id,
+        user_id=user_id,
+        name=dataset_name,
+        original_filename=file.filename or "upload",
+        file_path=str(file_path),
+        file_size=size,
+        file_type=file_type,
+        status=DatasetStatus.processing,
+    )
+    db.add(dataset)
+    await db.commit()
+    await db.refresh(dataset)
+
+    try:
+        # 1. Parse file → DataFrame + stats
+        result = parse_file(str(file_path), file_type)
+
+        # 2. Ingest DataFrame into DuckDB as permanent table
+        duckdb_table = ingest_dataframe(str(dataset_id), result.df)
+
+        # 3. Store only metadata in Postgres
+        dataset.status       = DatasetStatus.ready
+        dataset.row_count    = result.row_count
+        dataset.column_count = result.column_count
+        dataset.schema       = [col.model_dump() for col in result.schema]
+        dataset.stats        = result.stats
+        dataset.duckdb_table = duckdb_table   # ← the link between Postgres and DuckDB
+
+    except Exception as exc:
+        logger.error("Ingest failed", extra={"dataset_id": str(dataset_id), "error": str(exc)})
+        dataset.status        = DatasetStatus.error
+        dataset.error_message = str(exc)
+
+    await db.commit()
+    await db.refresh(dataset)
+    return DatasetRead.model_validate(dataset)

@@ -57,14 +57,19 @@ class PrettyConsoleFormatter(logging.Formatter):
         icon       = LEVEL_ICONS.get(level, "·")
         lvl_color  = LEVEL_STYLES.get(level, "")
         name_color = LOGGER_COLORS.get(record.name, WHITE)
-        request_id = getattr(record, "request_id", "system")
+        request_id = request_id = request_id_var.get()
         short_name = record.name.split(".")[-1].upper()
+        location = f"{record.filename}:{record.lineno}"
 
         # Header line
         time_part   = f"{DIM}{now}{RESET}"
         level_part  = f"{lvl_color}{icon} {level:<8}{RESET}"
         name_part   = f"{name_color}{BOLD}{short_name:<7}{RESET}"
-        rid_part    = f"{DIM}[{request_id}]{RESET}"
+        rid_part    = (
+                        f"{DIM}[{request_id}]{RESET}"
+                        if request_id
+                        else f"{DIM}{location}{RESET}"
+                    )
 
         # Message
         msg = record.getMessage()

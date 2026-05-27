@@ -31,7 +31,10 @@ class Settings(BaseSettings):
     MAIL_PORT: int = 587
     MAIL_SERVER: str = "smtp.gmail.com"
 
-
+    # DuckDB
+    DUCKDB_PATH: str =  "data/analytics.duckdb"
+    DUCKDB_READ_ONLY:bool = False
+    
     UPLOAD_DIR: str = "uploads"
 
     class Config:

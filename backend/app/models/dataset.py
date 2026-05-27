@@ -33,7 +33,7 @@ class Dataset(Base):
     column_count = Column(Integer, nullable=True)
     schema = Column(JSON, nullable=True)                # [{name, type, nullable, sample_values}]
     stats = Column(JSON, nullable=True)                 # {missing_pct, outlier_cols, ...}
-
+    duckdb_table = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
