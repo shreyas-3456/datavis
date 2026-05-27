@@ -47,7 +47,7 @@ class DatasetRead(DatasetBase):
     error_message: Optional[str] = None
     row_count: Optional[int] = None
     column_count: Optional[int] = None
-    schema: Optional[list[ColumnSchema]] = None
+    column_schema: Optional[list[ColumnSchema]] = Field(None, alias="schema")
     stats: Optional[dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime

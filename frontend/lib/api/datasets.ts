@@ -1,15 +1,6 @@
-import {
-  listDatasetsAction,
-  getDatasetAction,
-  getDatasetPreviewAction,
-  deleteDatasetAction,
-  uploadDatasetAction,
-} from "@/lib/actions/dataset.actions";
-
-// ── Types ─────────────────────────────────────────────────────────────────────
+import axios from "axios";
 
 export type DatasetStatus = "pending" | "processing" | "ready" | "error";
-
 export type ColumnDtype = "integer" | "float" | "string" | "boolean" | "datetime";
 
 export interface ColumnSchema {
@@ -66,39 +57,29 @@ export interface DatasetPreview {
   preview_rows: number;
 }
 
-// ── API calls (via server actions — no direct FastAPI calls from browser) ─────
+export interface PresignResponse {
+  dataset_id: string;
+  upload_url: string;
+  s3_key: string;
+  expires_in: number;
+  content_type: string;
+}
 
-export async function uploadDataset(
+// ── S3 PUT (pure client-side, called from the hook) ───────────────────────────
+export async function putToS3(
+  uploadUrl: string,
   file: File,
-  name?: string,
-  onProgress?: (pct: number) => void
-): Promise<Dataset> {
-  // Progress can't be tracked through server actions (no streaming).
-  // We simulate it: jump to 50% immediately, then 100% on resolve.
-  onProgress?.(50);
-  const formData = new FormData();
-  formData.append("file", file);
-  if (name) formData.append("name", name);
-  const result = await uploadDatasetAction(formData);
-  onProgress?.(100);
-  return result;
-}
-
-export async function listDatasets(skip = 0, limit = 50): Promise<DatasetList> {
-  return listDatasetsAction(skip, limit);
-}
-
-export async function getDataset(id: string): Promise<Dataset> {
-  return getDatasetAction(id);
-}
-
-export async function getDatasetPreview(
-  id: string,
-  limit = 100
-): Promise<DatasetPreview> {
-  return getDatasetPreviewAction(id, limit);
-}
-
-export async function deleteDataset(id: string): Promise<void> {
-  return deleteDatasetAction(id);
+  contentType: string,
+  onProgress?: (pct: number) => void,
+): Promise<void> {
+  await axios.put(uploadUrl, file, {
+    headers: {
+      "Content-Type": contentType,
+    },
+    onUploadProgress: (e) => {
+      if (e.total) {
+        onProgress?.(10 + Math.round((e.loaded / e.total) * 80));
+      }
+    },
+  });
 }

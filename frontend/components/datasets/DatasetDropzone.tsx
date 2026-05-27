@@ -70,6 +70,7 @@ export function DatasetDropzone({ onUploaded }: DropzoneProps) {
         onUploaded?.();
         setTimeout(() => setState({ phase: "idle" }), 3000);
       } catch (err: unknown) {
+        console.error("Upload error:", err);  
         setState({
           phase: "error",
           message: err instanceof Error ? err.message : "Upload failed.",

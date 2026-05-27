@@ -23,7 +23,6 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
     COOKIE_DOMAIN: str = "localhost"
 
-    # Gmail SMTP
     MAIL_USERNAME: str
     MAIL_PASSWORD: str
     MAIL_FROM: str
@@ -31,11 +30,18 @@ class Settings(BaseSettings):
     MAIL_PORT: int = 587
     MAIL_SERVER: str = "smtp.gmail.com"
 
-    # DuckDB
-    DUCKDB_PATH: str =  "data/analytics.duckdb"
-    DUCKDB_READ_ONLY:bool = False
-    
+    DUCKDB_PATH: str = "data/analytics.duckdb"
+    DUCKDB_READ_ONLY: bool = False
+
     UPLOAD_DIR: str = "uploads"
+
+    # S3
+    AWS_ACCESS_KEY_ID: str
+    AWS_SECRET_ACCESS_KEY: str
+    AWS_REGION: str = "ap-south-1"
+    S3_BUCKET: str
+    S3_PRESIGN_EXPIRY: int = 900          # 15 min — enough for large uploads
+    S3_KEY_PREFIX: str = "uploads"
 
     class Config:
         env_file = ".env"

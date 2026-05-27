@@ -45,11 +45,17 @@ def _arrow_dtype(arrow_type: pa.DataType) -> str:
 def load_dataframe(file_path: str, file_type: str) -> pd.DataFrame:
     path = Path(file_path)
     if file_type == "csv":
-        return pd.read_csv(path, low_memory=False)
+        try:
+            return pd.read_csv(path, low_memory=False)
+        except Exception:
+            return pd.read_csv(path, engine="python", on_bad_lines="skip")
     elif file_type == "excel":
         return pd.read_excel(path)
     elif file_type == "json":
-        return pd.read_json(path)
+        try:
+            return pd.read_json(path)
+        except ValueError:
+            return pd.read_json(path, lines=True)
     else:
         raise ValueError(f"Unsupported file type: {file_type}")
 
