@@ -9,6 +9,7 @@ from app.api.v1.api import router as api_router
 from app.db.session import engine
 from app.db.base import Base
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup

@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     MAIL_PORT: int = 587
     MAIL_SERVER: str = "smtp.gmail.com"
 
+
+    UPLOAD_DIR: str = "uploads"
+
     class Config:
         env_file = ".env"
         case_sensitive = True

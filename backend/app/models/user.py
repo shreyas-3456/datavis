@@ -1,8 +1,10 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, Enum as SAEnum
+from sqlalchemy import Column, String, Boolean, Enum as SAEnum 
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from app.db.base import Base
 import enum
+from app.models.dataset import Dataset
 
 class UserRole(str, enum.Enum):
     admin = "admin"
@@ -26,3 +28,4 @@ class User(Base):
     provider_id = Column(String, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
+    datasets = relationship("Dataset", back_populates="user", cascade="all, delete-orphan")
