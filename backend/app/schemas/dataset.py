@@ -70,3 +70,10 @@ class DatasetPreview(BaseModel):
     rows: list[dict[str, Any]]
     total_rows: int
     preview_rows: int
+
+
+class DatasetQuery(BaseModel):
+    columns: list[str]
+    rows: list[dict[str, Any]]
+    row_count: int
+    truncated: bool

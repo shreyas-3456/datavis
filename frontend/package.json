@@ -15,6 +15,7 @@
     "@tanstack/react-query-devtools": "^5.100.14",
     "axios": "^1.16.1",
     "clsx": "^2.1.1",
+    "d3": "^7.9.0",
     "js-cookie": "^3.0.7",
     "next": "16.2.6",
     "next-auth": "^4.24.14",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/d3": "^7.4.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

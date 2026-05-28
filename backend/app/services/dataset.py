@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -14,11 +15,16 @@ from app.core.logger import logger
 from app.core.s3 import generate_presigned_put, delete_s3_object
 from app.models.dataset import Dataset, DatasetStatus
 from app.schemas.dataset import DatasetRead, DatasetList
-from app.services.parser import preview_file
 from app.worker.tasks import process_dataset
 
 ALLOWED_SUFFIXES = {".csv": "csv", ".xls": "excel", ".xlsx": "excel", ".json": "json"}
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
+
+_FORBIDDEN = re.compile(
+    r"\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|COPY|EXPORT|IMPORT"
+    r"|ATTACH|DETACH|PRAGMA|CALL|EXECUTE|LOAD|INSTALL)\b",
+    re.IGNORECASE,
+)
 
 
 def _detect_file_type(filename: str) -> str:
@@ -39,7 +45,36 @@ def _content_type_for(file_type: str) -> str:
     }.get(file_type, "application/octet-stream")
 
 
+def _validate_query(sql: str, allowed_table: str) -> None:
+    """
+    Guardrails:
+    1. Must start with SELECT
+    2. No write / DDL keywords
+    3. Must use FROM tbl abstraction
+    """
+
+    stripped = sql.strip()
+
+    if not stripped.upper().startswith("SELECT"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only SELECT queries are allowed.",
+        )
+
+    if _FORBIDDEN.search(stripped):
+        raise HTTPException(
+            status_code=400,
+            detail="Query contains forbidden keywords.",
+        )
+
+    if not re.search(r"\bFROM\s+tbl\b", stripped, re.IGNORECASE):
+        raise HTTPException(
+            status_code=400,
+            detail="Queries must use 'FROM tbl'.",
+        )
+
 # ── Presign ───────────────────────────────────────────────────────────────────
+
 async def presign_upload(
     db: AsyncSession,
     user_id: UUID,
@@ -73,8 +108,10 @@ async def presign_upload(
         "upload_url": presigned_url,
         "s3_key": s3_key,
         "expires_in": settings.S3_PRESIGN_EXPIRY,
-        "content_type": content_type
+        "content_type": content_type,
     }
+
+
 # ── Confirm ───────────────────────────────────────────────────────────────────
 
 async def confirm_upload(
@@ -94,10 +131,9 @@ async def confirm_upload(
     dataset.status = DatasetStatus.processing
     await db.flush()
 
-    # Enqueue — Celery wakes worker instantly via Redis BRPOP
     process_dataset.delay(
         str(dataset.id),
-        dataset.file_path,   # s3_key
+        dataset.file_path,
         dataset.file_type,
     )
 
@@ -164,17 +200,92 @@ async def get_dataset_preview(
     dataset = await _get_dataset_orm(db, user_id, dataset_id)
     if dataset.status != DatasetStatus.ready:
         raise HTTPException(status_code=400, detail="Dataset is not ready yet.")
-    # Preview now queries DuckDB directly instead of reading the file
     from app.db.duckdb import get_duck
     with get_duck() as conn:
         rows = conn.execute(
-        f'SELECT * FROM "{dataset.duckdb_table}" LIMIT {limit}'
-    ).fetchdf()
+            f'SELECT * FROM "{dataset.duckdb_table}" LIMIT {limit}'
+        ).fetchdf()
     columns = list(rows.columns)
+    clean = rows.where(rows.notna(), None)
     return {
         "columns": columns,
-        "rows": rows.where(rows.notna(), None).values.tolist(),
-        "total_rows": dataset.row_count,
+        "rows": clean.to_dict(orient="records"),
+        "total_rows": dataset.row_count or 0,
+        "preview_rows": len(clean),
+    }
+
+
+# ── Query ─────────────────────────────────────────────────────────────────────
+
+async def query_dataset(
+    db: AsyncSession,
+    user_id: UUID,
+    dataset_id: UUID,
+    sql: str,
+    limit: int = 2000,
+) -> dict[str, Any]:
+    """
+    Run a user-supplied SELECT against the dataset's DuckDB table.
+    Frontend queries should always use:
+
+        FROM tbl
+
+    Backend rewrites tbl -> actual DuckDB table name.
+    """
+
+    dataset = await _get_dataset_orm(db, user_id, dataset_id)
+
+    if dataset.status != DatasetStatus.ready:
+        raise HTTPException(
+            status_code=400,
+            detail="Dataset is not ready yet.",
+        )
+
+    table = dataset.duckdb_table
+
+    # validate incoming query
+    _validate_query(sql, table)
+
+    # rewrite virtual table alias
+    rewritten_sql = re.sub(
+        r"\bFROM\s+tbl\b",
+        f'FROM "{table}"',
+        sql,
+        flags=re.IGNORECASE,
+    )
+
+    rewritten_sql = re.sub(
+        r"\bJOIN\s+tbl\b",
+        f'JOIN "{table}"',
+        rewritten_sql,
+        flags=re.IGNORECASE,
+    )
+
+    # hard safety cap
+    cap = min(limit, 5000)
+
+    safe_sql = (
+        f'SELECT * FROM ({rewritten_sql.rstrip(";")}) AS _q LIMIT {cap}'
+    )
+
+    from app.db.duckdb import get_duck
+
+    with get_duck() as conn:
+        try:
+            df = conn.execute(safe_sql).fetchdf()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Query error: {exc}",
+            )
+
+    clean = df.where(df.notna(), None)
+
+    return {
+        "columns": list(clean.columns),
+        "rows": clean.to_dict(orient="records"),
+        "row_count": len(clean),
+        "truncated": len(clean) >= cap,
     }
 
 
@@ -188,13 +299,11 @@ async def delete_dataset(db: AsyncSession, user_id: UUID, dataset_id: UUID) -> N
     await db.delete(dataset)
     await db.flush()
 
-    # Clean up S3
     try:
         delete_s3_object(s3_key)
     except Exception as exc:
         logger.warning(f"S3 delete failed for {s3_key}: {exc}")
 
-    # Clean up DuckDB
     if duckdb_table:
         try:
             from app.db.duckdb import get_write_conn

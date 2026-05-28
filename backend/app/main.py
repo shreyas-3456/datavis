@@ -11,6 +11,7 @@ from app.core.middleware import LoggingMiddleware
 from app.api.v1.api import router as api_router
 from app.db.session import engine
 from app.db.base import Base
+import sys
 
 _celery_process: subprocess.Popen | None = None
 
@@ -59,8 +60,11 @@ async def lifespan(app: FastAPI):
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     _celery_process = subprocess.Popen(
         [
+            sys.executable,
+            "-m",
             "celery",
-            "-A", "app.worker.celery_app",
+            "-A",
+            "app.worker.celery_app",
             "worker",
             "--loglevel=info",
             "--concurrency=1",

@@ -3,13 +3,13 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.users import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.dataset import DatasetList, DatasetPreview, DatasetRead
+from app.schemas.dataset import DatasetList, DatasetPreview, DatasetQuery, DatasetRead
 from app.services import dataset as dataset_service
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
@@ -17,8 +17,8 @@ router = APIRouter(prefix="/datasets", tags=["datasets"])
 
 class PresignRequest(BaseModel):
     filename: str
-    file_size: int = 0   # optional — kept for future quota tracking, not enforced
-    name: str | None = None 
+    file_size: int = 0
+    name: str | None = None
 
 
 class PresignResponse(BaseModel):
@@ -31,6 +31,23 @@ class PresignResponse(BaseModel):
 
 class ConfirmRequest(BaseModel):
     dataset_id: UUID
+
+
+class QueryRequest(BaseModel):
+    sql: str
+    limit: int = 2000
+
+    @field_validator("sql")
+    @classmethod
+    def sql_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("sql must not be empty")
+        return v.strip()
+
+    @field_validator("limit")
+    @classmethod
+    def limit_cap(cls, v: int) -> int:
+        return max(1, min(v, 5000))
 
 
 @router.post(
@@ -105,6 +122,27 @@ async def preview_dataset(
         db=db, user_id=current_user.id, dataset_id=dataset_id, limit=limit,
     )
     return DatasetPreview(**raw)
+
+
+@router.post(
+    "/{dataset_id}/query",
+    response_model=DatasetQuery,
+    summary="Run a SELECT query against the dataset's DuckDB table",
+)
+async def query_dataset(
+    dataset_id: UUID,
+    body: QueryRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DatasetQuery:
+    raw = await dataset_service.query_dataset(
+        db=db,
+        user_id=current_user.id,
+        dataset_id=dataset_id,
+        sql=body.sql,
+        limit=body.limit,
+    )
+    return DatasetQuery(**raw)
 
 
 @router.delete("/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)

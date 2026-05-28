@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
   response.cookies.set("access_token", access_token, {
     ...COOKIE_OPTS,
-    maxAge: 60 * 30,
+    maxAge: 60 * 300,
   });
 
   response.cookies.set("refresh_token", refresh_token, {

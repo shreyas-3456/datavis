@@ -440,7 +440,7 @@ useEffect(() => {
 
                   {/* Sidebar preview */}
                   <div className="col-span-2 space-y-2">
-                    {["Dashboard", "Datasets", "Charts", "Settings"].map((item, i) => (
+                    {["Dashboard", "Datasets", "Charts"].map((item, i) => (
                       <div
                         key={item}
                         className={`h-8 rounded-lg flex items-center px-3 text-xs ${i === 0 ? "bg-indigo-600/20 text-indigo-400" : "text-gray-600"}`}

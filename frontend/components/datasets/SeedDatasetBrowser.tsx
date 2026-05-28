@@ -5,13 +5,13 @@ import { useSeeds, useLinkSeed } from "@/lib/hooks/useSeeds";
 import type { SeedDataset } from "@/lib/actions/seed.actions";
 
 const DOMAIN_COLORS: Record<string, { bg: string; text: string }> = {
-  finance:     { bg: "bg-blue-950/60",   text: "text-blue-400"   },
-  environment: { bg: "bg-emerald-950/60",text: "text-emerald-400" },
-  healthcare:  { bg: "bg-red-950/60",    text: "text-red-400"    },
-  social:      { bg: "bg-violet-950/60", text: "text-violet-400" },
-  education:   { bg: "bg-amber-950/60",  text: "text-amber-400"  },
-  food:        { bg: "bg-orange-950/60", text: "text-orange-400" },
-  geoscience:  { bg: "bg-stone-800/60",  text: "text-stone-400"  },
+  finance:     { bg: "bg-blue-950/60",    text: "text-blue-400"    },
+  environment: { bg: "bg-emerald-950/60", text: "text-emerald-400" },
+  healthcare:  { bg: "bg-red-950/60",     text: "text-red-400"     },
+  social:      { bg: "bg-violet-950/60",  text: "text-violet-400"  },
+  education:   { bg: "bg-amber-950/60",   text: "text-amber-400"   },
+  food:        { bg: "bg-orange-950/60",  text: "text-orange-400"  },
+  geoscience:  { bg: "bg-stone-800/60",   text: "text-stone-400"   },
 };
 
 const DOMAIN_ACTIVE: Record<string, string> = {
@@ -37,20 +37,31 @@ function fmt(n: number | null) {
     : String(n);
 }
 
-// ── Single card ───────────────────────────────────────────────
+// ── Single card ───────────────────────────────────────────────────────────────
 
-function SeedCard({ seed, onLink }: { seed: SeedDataset; onLink: (key: string) => void }) {
+interface SeedCardProps {
+  seed: SeedDataset;
+  onLink: (duckdbTable: string) => void;
+  alreadyLinked: boolean;
+}
+
+function SeedCard({ seed, onLink, alreadyLinked }: SeedCardProps) {
   const { mutate, isPending, isSuccess, error } = useLinkSeed();
   const { bg, text } = domainStyle(seed.domain);
 
   function handleAdd() {
-    mutate(seed.seed_key, { onSuccess: () => onLink(seed.seed_key) });
+    mutate(seed.seed_key, {
+      onSuccess: () => onLink(seed.name),
+    });
   }
 
-  const alreadyAdded =
-    isSuccess ||
+  const apiSaysAlready =
     ((error as Error | null)?.message ?? "").includes("409") ||
     ((error as Error | null)?.message ?? "").toLowerCase().includes("already");
+
+  // alreadyLinked comes from the server — it is the source of truth.
+  // isSuccess / apiSaysAlready cover the optimistic in-session case.
+  const isAdded = alreadyLinked || isSuccess || apiSaysAlready;
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-slate-700/50 bg-slate-800/50 p-4 shadow-sm hover:border-slate-600/70 hover:bg-slate-800/80 transition-all duration-200">
@@ -79,8 +90,8 @@ function SeedCard({ seed, onLink }: { seed: SeedDataset; onLink: (key: string) =
         {seed.source_url && (
           <>
             <span className="text-slate-700">·</span>
-            
-              <a href={seed.source_url}
+            <a
+              href={seed.source_url}
               target="_blank"
               rel="noopener noreferrer"
               className="text-slate-500 hover:text-slate-300 underline underline-offset-2 transition-colors"
@@ -93,12 +104,12 @@ function SeedCard({ seed, onLink }: { seed: SeedDataset; onLink: (key: string) =
 
       {/* Action */}
       <div className="mt-auto pt-1">
-        {isSuccess || alreadyAdded ? (
-          <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
+        {isAdded ? (
+          <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-400">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
-            {alreadyAdded && !isSuccess ? "Already in your datasets" : "Added to your datasets"}
+            {alreadyLinked && !isSuccess ? "Already in your datasets" : "Added to your datasets"}
           </div>
         ) : (
           <>
@@ -109,7 +120,7 @@ function SeedCard({ seed, onLink }: { seed: SeedDataset; onLink: (key: string) =
             >
               {isPending ? "Adding…" : "Add to my datasets"}
             </button>
-            {error && !alreadyAdded && (
+            {error && !apiSaysAlready && (
               <p className="mt-1.5 text-xs text-red-400">
                 {(error as Error).message}
               </p>
@@ -121,13 +132,49 @@ function SeedCard({ seed, onLink }: { seed: SeedDataset; onLink: (key: string) =
   );
 }
 
-// ── Browser ───────────────────────────────────────────────────
+// ── Skeleton card ─────────────────────────────────────────────────────────────
 
-export default function SeedDatasetBrowser({ onClose }: { onClose?: () => void }) {
-  const { data: seeds, isLoading, error } = useSeeds();
+function SeedCardSkeleton() {
+  return (
+    <div className="h-48 rounded-xl bg-slate-800/60 animate-pulse" />
+  );
+}
+
+// ── Browser ───────────────────────────────────────────────────────────────────
+
+interface SeedDatasetBrowserProps {
+  onClose?: () => void;
+  /**
+   * Set of dataset names already in the user's dataset list.
+   * Derived in page.tsx: new Set(datasets.map(d => d.name).filter(Boolean))
+   * A seed's name matches the linked dataset's name — that's the join key.
+   * Cards must NOT render until datasetsLoading is false — otherwise this
+   * set is empty and every card incorrectly shows "Add to my datasets".
+   */
+  linkedDatasetNames: Set<string>;
+  /**
+   * Must be true while useDatasets() is still fetching.
+   * The grid stays in skeleton state until BOTH queries have resolved
+   * so linkedDuckdbTables is always fully populated before cards render.
+   */
+  datasetsLoading: boolean;
+}
+
+export default function SeedDatasetBrowser({
+  onClose,
+  linkedDatasetNames,
+  datasetsLoading,
+}: SeedDatasetBrowserProps) {
+  const { data: seeds, isLoading: seedsLoading, error } = useSeeds();
   const [search, setSearch] = useState("");
   const [activeDomain, setActiveDomain] = useState<string | null>(null);
-  const [linked, setLinked] = useState<Set<string>>(new Set());
+  // Optimistic: track tables linked this session so the card flips
+  // immediately without waiting for the next datasets refetch.
+  const [sessionLinked, setSessionLinked] = useState<Set<string>>(new Set());
+
+  // Both queries must finish before we show any cards.
+  // This is the critical guard that prevents the "Add" flash on reload.
+  const isLoading = datasetsLoading || seedsLoading;
 
   const domains = [
     ...new Set((seeds ?? []).map((s) => s.domain).filter(Boolean)),
@@ -144,6 +191,17 @@ export default function SeedDatasetBrowser({ onClose }: { onClose?: () => void }
     return matchSearch && matchDomain;
   });
 
+  // Union: server-confirmed + added this session
+  const allLinkedNames = new Set([...linkedDatasetNames, ...sessionLinked]);
+
+  const alreadyAddedCount = filtered.filter(
+    (s) => allLinkedNames.has(s.name)
+  ).length;
+
+  function handleLink(name: string) {
+    setSessionLinked((prev) => new Set(prev).add(name));
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar */}
@@ -152,6 +210,12 @@ export default function SeedDatasetBrowser({ onClose }: { onClose?: () => void }
           <h2 className="text-base font-semibold text-slate-100">Sample Datasets</h2>
           <p className="text-xs text-slate-500 mt-0.5">
             Real-world datasets ready to explore — added instantly, no upload needed.
+            {!isLoading && alreadyAddedCount > 0 && (
+              <span className="ml-1 text-emerald-500">
+                {alreadyAddedCount}{" "}
+                {alreadyAddedCount === 1 ? "is" : "are"} already in your workspace.
+              </span>
+            )}
           </p>
         </div>
         {onClose && (
@@ -164,7 +228,7 @@ export default function SeedDatasetBrowser({ onClose }: { onClose?: () => void }
         )}
       </div>
 
-      {/* Search */}
+      {/* Search — always visible */}
       <input
         type="text"
         placeholder="Search datasets…"
@@ -174,7 +238,7 @@ export default function SeedDatasetBrowser({ onClose }: { onClose?: () => void }
       />
 
       {/* Domain filter pills */}
-      {domains.length > 0 && (
+      {!isLoading && domains.length > 0 && (
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setActiveDomain(null)}
@@ -206,11 +270,11 @@ export default function SeedDatasetBrowser({ onClose }: { onClose?: () => void }
         </div>
       )}
 
-      {/* Grid */}
+      {/* Grid — skeleton until BOTH queries resolve */}
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-48 rounded-xl bg-slate-800/60 animate-pulse" />
+            <SeedCardSkeleton key={i} />
           ))}
         </div>
       ) : error ? (
@@ -223,7 +287,8 @@ export default function SeedDatasetBrowser({ onClose }: { onClose?: () => void }
             <SeedCard
               key={seed.seed_key}
               seed={seed}
-              onLink={(key) => setLinked((prev) => new Set(prev).add(key))}
+              onLink={handleLink}
+              alreadyLinked={allLinkedNames.has(seed.name)}
             />
           ))}
         </div>

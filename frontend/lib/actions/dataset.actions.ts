@@ -1,7 +1,7 @@
 "use server";
 
 import { serverRequest } from "@/lib/api/server";
-import type { Dataset, DatasetList, DatasetPreview, PresignResponse } from "@/lib/api/datasets";
+import type { Dataset, DatasetList, DatasetPreview, DatasetQueryResult, PresignResponse } from "@/lib/api/datasets";
 
 function unwrap<T>({ data, error, status }: { data: T | null; error: string | null; status: number }): T {
   if (error || data === null) {
@@ -57,5 +57,17 @@ export async function confirmUploadAction(datasetId: string): Promise<Dataset> {
     method: "POST",
     url: `/datasets/confirm`,
     data: { dataset_id: datasetId },
+  }));
+}
+
+export async function queryDatasetAction(
+  datasetId: string,
+  sql: string,
+  limit = 2000,
+): Promise<DatasetQueryResult> {
+  return unwrap(await serverRequest<DatasetQueryResult>({
+    method: "POST",
+    url: `/datasets/${encodeURIComponent(datasetId)}/query`,
+    data: { sql, limit },
   }));
 }

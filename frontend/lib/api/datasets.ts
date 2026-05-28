@@ -65,6 +65,13 @@ export interface PresignResponse {
   content_type: string;
 }
 
+export interface DatasetQueryResult {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  row_count: number;
+  truncated: boolean;
+}
+
 // ── S3 PUT (pure client-side, called from the hook) ───────────────────────────
 export async function putToS3(
   uploadUrl: string,

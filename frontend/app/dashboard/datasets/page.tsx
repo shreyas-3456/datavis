@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { Dataset } from "@/lib/api/datasets";
 import { useDatasets } from "@/lib/hooks/useDatasets";
 import { DatasetDropzone } from "@/components/datasets/DatasetDropzone";
@@ -95,10 +95,26 @@ type Panel = "none" | "upload" | "seeds";
 export default function DatasetsPage() {
   const { data, isLoading, isError, refetch } = useDatasets();
   const [previewDataset, setPreviewDataset] = useState<Dataset | null>(null);
-  const [panel, setPanel] = useState<Panel>("upload");
+  const [panel, setPanel] = useState<Panel>("none");
+  const didAutoPanel = useRef(false);
 
   const datasets = data?.items ?? [];
   const total = data?.total ?? 0;
+
+  // Derive which seed_keys are already linked.
+  // Match seeds by name — a linked dataset's name is identical to the seed's name.
+  const linkedDatasetNames = new Set(
+    datasets.map((d) => d.name).filter(Boolean)
+  );
+
+  // Once data loads for the first time, auto-open the right panel:
+  // - has datasets → show seed browser (they don't need the uploader forced on them)
+  // - no datasets  → show uploader so they can get started
+  useEffect(() => {
+    if (isLoading || didAutoPanel.current) return;
+    didAutoPanel.current = true;
+    setPanel(datasets.length > 0 ? "seeds" : "upload");
+  }, [isLoading, datasets.length]);
 
   function togglePanel(p: Panel) {
     setPanel((cur) => (cur === p ? "none" : p));
@@ -175,7 +191,11 @@ export default function DatasetsPage() {
           borderRadius: 14,
           padding: "20px 24px",
         }}>
-          <SeedDatasetBrowser onClose={() => setPanel("none")} />
+          <SeedDatasetBrowser
+            onClose={() => setPanel("none")}
+            linkedDatasetNames={linkedDatasetNames}
+            datasetsLoading={isLoading}
+          />
         </div>
       )}
 

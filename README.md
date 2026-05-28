@@ -1,242 +1,209 @@
-# DataVis Platform — Handoff Prompt
+# DataVis Platform 📊✨
 
-## Project Overview
-DataVis Platform is a full-stack data exploration app with a marketing site, authenticated dashboard, dataset ingestion, and the start of a DuckDB-backed analytics layer.
+DataVis Platform is a high-performance, premium web application built for seamless data exploration, parsing, analytics, and interactive visualization. Designed with a modern decoupled architecture, it leverages **FastAPI** on the backend, **Next.js (React/TypeScript)** on the frontend, and a specialized double-storage engine pairing **PostgreSQL** (for relational metadata) with **DuckDB** (for ultra-fast, vectorized analytics queries on massive datasets).
 
-- Frontend: Next.js App Router, TypeScript, React 19, Tailwind CSS 4
-- Backend: FastAPI, SQLAlchemy async, Pydantic v2
-- Primary database: PostgreSQL
-- Analytics store: DuckDB
-- Client state: Redux Toolkit and TanStack React Query
-- Auth: JWT cookies plus Google OAuth
-- Infra pieces already present: Redis, Celery dependencies, Alembic, SMTP email
+---
 
-## Current Product Surface
+## 🏗️ System Design & Architecture
 
-### Marketing site
-- Landing page at `frontend/app/page.tsx`
-- Extra marketing pages under `frontend/app/(marketing)/`
-- Shared marketing layout and animated sections via `components/marketing/*`
+The system is designed to handle large file uploads asynchronously, parse them in a robust background process, and immediately expose them to an interactive visualization engine powered by SQL.
 
-### Authentication
-- Email/password signup and login
-- Google OAuth redirect flow through FastAPI
-- Logout
-- Forgot-password email flow
-- Reset-password token flow
-- `/auth/me` current-user endpoint
-- Route protection in Next.js middleware for dashboard pages
-- Auth cookies are persisted by Next.js server actions, not directly by browser-side API code
+### Architecture Diagram
 
-### Dashboard shell
-- Protected dashboard layout in `frontend/app/dashboard/layout.tsx`
-- Shared shell UI in `frontend/components/layout/`
-- Sidebar, topbar, and authenticated user context
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                        SYSTEM DESIGN & DATA FLOW                       │
+└────────────────────────────────────────────────────────────────────────┘
 
-### Dataset management
-- Upload CSV, Excel, and JSON files
-- Per-user dataset list
-- Dataset detail fetch
-- Dataset preview fetch
-- Dataset delete
-- Client-side upload UI, cards, and preview drawer in `frontend/components/datasets/`
-- React Query hooks for list, detail, preview, upload, and delete
-
-### Sample datasets
-- Dashboard datasets page now supports two acquisition paths:
-  - upload your own file
-  - browse shared sample datasets
-- `SeedDatasetBrowser` provides search, domain filters, and “add to my datasets” actions
-- Backend includes seed-linking support so a user can attach a shared seeded DuckDB dataset to their own dataset catalogue entry
-
-### DuckDB analytics groundwork
-- Shared DuckDB connection at `backend/app/db/duckdb.py`
-- Dataset model now includes `duckdb_table`
-- Upload flow is being extended so uploaded datasets are ingested into DuckDB and Postgres stores metadata
-- One-time seed script at `backend/seed.py` downloads real-world datasets, creates permanent DuckDB tables, and stores seed catalogue metadata in Postgres
-
-## Architecture And Request Flow
-
-### Frontend request pattern
-Browser components do not call FastAPI directly for app data. The standard flow is:
-
-`client component -> Next.js server action -> serverRequest() -> FastAPI`
-
-Key files:
-- `frontend/lib/api/server.ts`
-- `frontend/lib/actions/auth.actions.ts`
-- `frontend/lib/actions/dataset.actions.ts`
-- `frontend/lib/actions/seed.actions.ts`
-
-`serverRequest()` forwards the app's auth cookies to the backend and returns `{ data, error, status, headers }` instead of throwing. Server actions use small `unwrap()` helpers to convert that into typed return values or thrown errors.
-
-### Auth flow
-- FastAPI sets `access_token` and `refresh_token` cookies on login/signup/OAuth callback
-- Next.js server actions mirror those cookies into the frontend app domain after auth calls
-- Dashboard layout calls `getMe()` server-side before rendering protected routes
-- `frontend/middleware.ts` redirects unauthenticated users away from protected routes
-
-### Dataset flow
-- Uploads hit `POST /api/v1/datasets/`
-- Backend saves the file under `UPLOAD_DIR/<user_id>/...`
-- Parser extracts schema, stats, and preview-ready metadata
-- Dataset records live in Postgres
-- The newer in-progress path also ingests uploaded data into DuckDB and stores the resulting `duckdb_table` on the dataset row
-
-### Seed dataset flow
-- Seed catalogue data lives globally in a Postgres `seed_datasets` table
-- Permanent shared tables live in DuckDB
-- A user links a seed dataset, which creates a normal `datasets` row for that user pointing at the shared `duckdb_table`
-
-## Important Backend Modules
-
-### API
-- `backend/app/api/v1/endpoints/auth.py`
-- `backend/app/api/v1/endpoints/dataset.py`
-- `backend/app/api/v1/endpoints/seed.py`
-
-### Services
-- `backend/app/services/auth.py`
-- `backend/app/services/user.py`
-- `backend/app/services/parser.py`
-- `backend/app/services/dataset.py`
-- `backend/app/services/duckdb_ingest.py`
-
-### Persistence
-- Postgres ORM models in `backend/app/models/`
-- Async SQLAlchemy session in `backend/app/db/session.py`
-- DuckDB connection lifecycle in `backend/app/db/duckdb.py`
-- App startup warms Postgres metadata and DuckDB connection in `backend/app/main.py`
-
-## Important Frontend Modules
-
-### Layout and auth
-- `frontend/app/layout.tsx`
-- `frontend/app/dashboard/layout.tsx`
-- `frontend/middleware.ts`
-- `frontend/components/layout/DashboardShell.tsx`
-
-### Dataset UI
-- `frontend/app/dashboard/datasets/page.tsx`
-- `frontend/components/datasets/DatasetDropzone.tsx`
-- `frontend/components/datasets/DatasetCard.tsx`
-- `frontend/components/datasets/DatasetPreviewDrawer.tsx`
-- `frontend/components/datasets/SeedDatasetBrowser.tsx`
-
-### Data access
-- `frontend/lib/api/datasets.ts`
-- `frontend/lib/actions/dataset.actions.ts`
-- `frontend/lib/actions/seed.actions.ts`
-- `frontend/lib/hooks/useDatasets.ts`
-- `frontend/lib/hooks/useSeeds.ts`
-
-## Current Backend Endpoints
-
-### Auth
-- `POST /api/v1/auth/signup`
-- `POST /api/v1/auth/login`
-- `POST /api/v1/auth/logout`
-- `POST /api/v1/auth/refresh`
-- `POST /api/v1/auth/forgot-password`
-- `POST /api/v1/auth/reset-password`
-- `GET /api/v1/auth/google`
-- `GET /api/v1/auth/google/callback`
-- `GET /api/v1/auth/me`
-
-### Datasets
-- `POST /api/v1/datasets/`
-- `GET /api/v1/datasets/`
-- `GET /api/v1/datasets/{dataset_id}`
-- `GET /api/v1/datasets/{dataset_id}/preview`
-- `DELETE /api/v1/datasets/{dataset_id}`
-
-### Seeds
-- `POST /api/v1/{seed_key}/link`
-
-Note: the frontend seed browser expects a seed catalogue listing action as well. The current worktree contains the browser, hook, and link endpoint, but the list endpoint is not present in `backend/app/api/v1/endpoints/seed.py` yet.
-
-## Data Model Notes
-
-### `Dataset`
-The dataset row is the key bridge between product UX and storage backends.
-
-Current fields include:
-- ownership and identity: `id`, `user_id`, `name`
-- file metadata: `original_filename`, `file_path`, `file_size`, `file_type`
-- processing status: `status`, `error_message`
-- parsed metadata: `row_count`, `column_count`, `schema`, `stats`
-- analytics bridge: `duckdb_table`
-- timestamps: `created_at`, `updated_at`
-
-### `seed_datasets`
-This is not an ORM model yet. It is created and populated by `backend/seed.py` as a shared catalogue of curated datasets that users can attach to their own workspace.
-
-## Local Development
-
-### Backend
-```bash
-cd backend
-docker compose up -d
-source venv/bin/activate
-uvicorn app.main:app --reload --port 8000
+              ┌──────────────────────────────────────┐
+              │             Web Browser              │
+              │  (Next.js / React / Chart.js UI)     │
+              └──────────────────┬───────────────────┘
+                                 │
+                                 │ HTTP API Requests
+                                 ▼
+              ┌──────────────────────────────────────┐
+              │           FastAPI Server             │ (API Gateway & Web Host)
+              │       (app.api.v1.api_router)        │
+              └──────┬────────────────────────┬──────┘
+                     │                        │
+        1. Upload &  │                        │ 3. Run Analytics
+        Metadata Save│                        │    Queries (SQL)
+                     ▼                        ▼
+      ┌─────────────────────────┐  ┌─────────────────────────┐
+      │     PostgreSQL DB       │  │      DuckDB Engine      │ (Vectorized Columnar
+      │  (Relational Metadata)  │  │ (analytics.duckdb File) │  Analytics Database)
+      └─────────────────────────┘  └────────────▲────────────┘
+                     │                          │
+                     │ 2. Enqueue task          │ 5. Writes permanent
+                     ▼                          │    analytical table
+      ┌─────────────────────────┐               │    ("ds_<dataset_id>")
+      │     Redis Message       │               │
+      │         Broker          │               │
+      └──────────────┬──────────┘               │
+                     │                          │
+                     │ Pull job                 │
+                     ▼                          │
+      ┌─────────────────────────┐               │
+      │      Celery Worker      │───────────────┘
+      │   (Background Parser)   │ 4. Read & process
+      └──────────────┬──────────┘    (Pandas / S3)
+                     │
+                     │ Read / Write Files
+                     ▼
+      ┌─────────────────────────┐
+      │     AWS S3 Storage      │ (Object storage for original
+      │   (File Upload Bucket)  │  CSV/Excel/JSON files)
+      └─────────────────────────┘
 ```
 
+### Architectural Components
+
+1. **Frontend Tier (Next.js & React)**:
+   - Modern, highly responsive user interface featuring drag-and-drop dataset upload zones (`DatasetDropzone`), dataset preview tools (`DatasetPreviewDrawer`), and a robust visualization sandbox (`VisualizationBuilder`).
+   - Performs state management and triggers backend API requests using modern asynchronous hooks.
+
+2. **Web / API Gateway Tier (FastAPI)**:
+   - Single entrypoint exposing secure endpoints for User Authentication, Dataset Metadata Operations, and analytical query execution.
+   - Employs an async context lifespan to boot up essential database connectors and orchestrate local worker processes.
+
+3. **Message Broker & Task Queue (Redis + Celery)**:
+   - Redis manages the job queues, acting as a broker between FastAPI and Celery.
+   - Celery asynchronously consumes heavy file parsing tasks, preventing HTTP request blocking.
+
+4. **Double Storage Layer**:
+   - **PostgreSQL**: Stores persistent operational metadata (Users, Roles, Dataset status, Metadata, schemas, stats, and configurations).
+   - **AWS S3 Bucket**: Stores the raw uploaded files securely with support for presigned URLs.
+   - **DuckDB**: Embedded in-process columnar database. Once Celery parses a file into a Pandas DataFrame, it registers the frame directly into DuckDB as a permanent, index-free table. Subsequent dynamic chart queries bypass Postgres completely and run directly against DuckDB using extremely fast vectorized execution.
+
+---
+
+## 🔄 End-to-End Data Pipeline
+
+```
+  ┌──────────────┐      ┌───────────────┐      ┌──────────────┐      ┌──────────────┐
+  │ 1. Upload    │ ───> │ 2. Enqueue    │ ───> │ 3. Parse     │ ───> │ 4. Ingest    │
+  │ File to S3   │      │ Celery Task   │      │ CSV/Excel    │      │ to DuckDB    │
+  └──────────────┘      └───────────────┘      └──────────────┘      └──────────────┘
+                                                                            │
+  ┌──────────────┐      ┌───────────────┐      ┌──────────────┐             │
+  │ 7. Render UI │ <─── │ 6. Execute    │ <─── │ 5. Dynamic   │ <───────────┘
+  │ Charts       │      │ DuckDB Query  │      │ API Request  │
+  └──────────────┘      └───────────────┘      └──────────────┘
+```
+
+1. **Upload & Stage**: The user drops a CSV or Excel sheet into the dropzone. The file is uploaded to the S3 bucket, and a dataset entry is created in PostgreSQL with `status = "pending"`.
+2. **Task Delegation**: FastAPI triggers the background celery task `process_dataset(dataset_id)` and returns a success response to the client immediately.
+3. **Parse & Analyze**: The Celery worker fetches the file from S3, loads it with Pandas, detects the schema types, calculates detailed metrics (row count, column counts, missing values, statistics), and writes the dataframe into DuckDB as a permanent table indexed by `ds_<dataset_uuid>`.
+4. **Ready State**: The worker updates the status in Postgres to `"ready"`.
+5. **Interactive Exploration**: The frontend receives the `"ready"` status and allows the user to explore the data. When the user filters or changes aggregation axes, the client sends a query representation to FastAPI.
+6. **Vectorized Querying**: FastAPI maps the request, sanitizes the query, runs SQL directly on the local DuckDB database, and responds in milliseconds.
+
+---
+
+## 🛠️ Tech Stack
+
+### Backend
+* **Language:** Python 3.10+
+* **Framework:** FastAPI
+* **Background Processing:** Celery + Redis
+* **Databases:** PostgreSQL (via SQLAlchemy asyncpg), DuckDB (Vectorized OLAP)
+* **Storage:** Boto3 (AWS S3)
+* **Migrations:** Alembic
+
 ### Frontend
+* **Framework:** Next.js (App Router), React 18, TypeScript
+* **Styling:** TailwindCSS
+* **State Management:** Zustand
+* **Visualizations:** Chart.js / Recharts
+
+---
+
+## 📁 Repository Directory Structure
+
+```text
+datavis-platform/
+├── README.md               # Root comprehensive documentation & architectural guide
+├── backend/                # FastAPI and Celery backend application
+│   ├── alembic/            # Database migration environment
+│   ├── app/                # Main Python application package
+│   │   ├── api/            # API endpoints (auth, dataset, users)
+│   │   ├── core/           # Config settings, logging, middleware
+│   │   ├── db/             # DB sessions (PostgreSQL, DuckDB connections)
+│   │   ├── models/         # SQLAlchemy models (User, Dataset)
+│   │   ├── schemas/        # Pydantic schemas
+│   │   ├── services/       # Core service files (ingestion, parsing, auth)
+│   │   ├── worker/         # Celery application initialization and tasks
+│   │   └── main.py         # App entrypoint and lifecycle events
+│   ├── docker-compose.yml  # Docker Compose config for local services (Postgres, Redis)
+│   └── requirements.txt    # Python package dependencies
+│
+└── frontend/               # Next.js and Tailwind CSS frontend application
+    ├── app/                # Next.js App Router structure & page endpoints
+    ├── components/         # Reusable React components
+    │   ├── auth/           # Login, Register, Profile components
+    │   ├── dashboard/      # Main dashboard home & Visualization Builder
+    │   ├── datasets/       # Upload dropzones, preview drawers, seed datasets
+    │   └── ui/             # Reusable primitive UI buttons, inputs, etc.
+    ├── lib/                # Utility helpers (API clients, formatting tools)
+    ├── store/              # Zustand global state hooks
+    └── package.json        # Frontend NPM script definitions & dependencies
+```
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+Make sure you have the following installed on your host system:
+* **Docker** & **Docker Compose**
+* **Python 3.10+** (with `pip` and virtual environment support)
+* **Node.js 18+** & **npm**
+
+### Step 1: Spin up local Infrastructure Services
+Start PostgreSQL and Redis container infrastructure in the background:
 ```bash
-cd frontend
+cd backend
+docker-compose up -d
+```
+
+### Step 2: Configure Backend Environment
+Copy the env template and fill out the details:
+```bash
+cp .env.example .env
+```
+Ensure your database connections and AWS keys or local equivalents are filled in.
+
+### Step 3: Run Backend Migrations & Seeding
+Create your virtual environment, install python dependencies, apply database migrations, and run seeds:
+```bash
+# Set up virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run migrations to initialize PostgreSQL schemas
+alembic upgrade head
+
+# Seed base application/datasets
+python seed.py
+```
+
+### Step 4: Run the Backend & Celery Worker
+Start the FastAPI server:
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+> **Note:** The FastAPI lifespan context automatically fires up the Celery worker process as a subprocess. If you prefer running it independently, see `app/main.py`.
+
+### Step 5: Boot Up the Frontend Application
+Navigate into the frontend directory, install dependencies, and start the development server:
+```bash
+cd ../frontend
 npm install
 npm run dev
 ```
 
-## Environment Variables
-
-### Backend `.env`
-```env
-SECRET_KEY=
-DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/datavis
-SYNC_DATABASE_URL=postgresql://postgres:password@localhost:5432/datavis
-REDIS_URL=redis://localhost:6379/0
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/auth/google/callback
-FRONTEND_URL=http://localhost:3000
-MAIL_USERNAME=
-MAIL_PASSWORD=
-MAIL_FROM=
-DUCKDB_PATH=data/analytics.duckdb
-DUCKDB_READ_ONLY=false
-UPLOAD_DIR=uploads
-```
-
-### Frontend `.env.local`
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
-INTERNAL_API_URL=http://localhost:8000/api/v1
-NEXTAUTH_SECRET=
-NEXTAUTH_URL=http://localhost:3000
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=
-```
-
-## Handoff Notes For The Next Engineer
-
-### What is solid
-- Auth flow is implemented end to end
-- Protected dashboard shell is in place
-- Dataset upload/list/preview/delete flow exists
-- Frontend follows a consistent server-action boundary for backend calls
-- DuckDB integration and seed-catalogue direction are established
-
-### What is in progress
-- `backend/app/services/dataset.py` currently contains duplicated `upload_dataset()` logic from an in-progress DuckDB ingestion refactor
-- Seed linking exists, but the seed catalogue list endpoint expected by the frontend is missing from the checked-in backend route file
-- Alembic is present and there is a migration for `duckdb_table`, but startup still relies on `Base.metadata.create_all()` as well
-
-### Reasonable next steps
-1. Finish the dataset service refactor so upload has one canonical path: save file, parse, ingest to DuckDB, persist metadata, clean up on failure.
-2. Add `GET /api/v1/seeds/` to return the seed catalogue consumed by `SeedDatasetBrowser`.
-3. Ensure dataset deletion also drops its DuckDB table when appropriate.
-4. Add query endpoints on top of `duckdb_table` for actual analytics and visualization workflows.
-5. Decide whether `seed_datasets` should remain raw SQL managed or become a first-class ORM model.
-
-## Short Summary
-If you are picking this up fresh: treat the app as an authenticated dataset workspace built on Next.js and FastAPI, where Postgres owns users and dataset metadata, while DuckDB is becoming the execution layer for uploaded and seeded analytical datasets. The main product work now is to finish the DuckDB-backed dataset lifecycle and build query and visualization features on top of it.
+Open `http://localhost:3000` in your web browser to access the interactive data visualization playground!
