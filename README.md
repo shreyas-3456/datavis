@@ -17,7 +17,7 @@ The system is designed to handle large file uploads asynchronously, parse them i
 
               ┌──────────────────────────────────────┐
               │             Web Browser              │
-              │  (Next.js / React / Chart.js UI)     │
+              │  (Next.js / React / D3.js UI)     │
               └──────────────────┬───────────────────┘
                                  │
                                  │ HTTP API Requests
@@ -115,7 +115,7 @@ The system is designed to handle large file uploads asynchronously, parse them i
 * **Framework:** Next.js (App Router), React 18, TypeScript
 * **Styling:** TailwindCSS
 * **State Management:** Zustand
-* **Visualizations:** Chart.js / Recharts
+* **Visualizations:** D3.js / Recharts
 
 ---
 
