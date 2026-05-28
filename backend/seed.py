@@ -231,7 +231,7 @@ def clean_df(df: pd.DataFrame) -> pd.DataFrame:
 async def seed() -> None:
     from sqlalchemy import select, text
     from app.db.session import AsyncSessionLocal
-    from app.db.duckdb import _get_conn
+    from app.db.duckdb import get_write_conn
     from app.core.config import settings
     from app.services.duckdb_ingest import ingest_dataframe
     from app.services.parser import _column_schema, _detect_outliers
@@ -259,7 +259,7 @@ async def seed() -> None:
         """))
         await db.commit()
 
-    _get_conn()  # warm DuckDB connection
+    get_write_conn().close()  # warm DuckDB connection
 
     print(f"\n DataVis — Global Dataset Seeder")
     print(f" DuckDB : {Path(settings.DUCKDB_PATH).resolve()}\n")
@@ -288,15 +288,18 @@ async def seed() -> None:
                 # 2. Ingest into DuckDB — table name uses seed_key not a uuid
                 #    so it's human-readable and stable
                 duckdb_table = f"seed_{ds['seed_key']}"
-                from app.db.duckdb import _lock, _get_conn as _duck
+                from app.db.duckdb import _lock, get_write_conn as _duck
                 import duckdb
                 with _lock:
                     conn = _duck()
-                    conn.execute(f'DROP TABLE IF EXISTS "{duckdb_table}"')
-                    conn.execute(f'CREATE TABLE "{duckdb_table}" AS SELECT * FROM df')
-                    row_count = conn.execute(
-                        f'SELECT COUNT(*) FROM "{duckdb_table}"'
-                    ).fetchone()[0]
+                    try:
+                        conn.execute(f'DROP TABLE IF EXISTS "{duckdb_table}"')
+                        conn.execute(f'CREATE TABLE "{duckdb_table}" AS SELECT * FROM df')
+                        row_count = conn.execute(
+                            f'SELECT COUNT(*) FROM "{duckdb_table}"'
+                        ).fetchone()[0]
+                    finally:
+                        conn.close()
                 print(f"    ✓ DuckDB  → {duckdb_table}  ({row_count:,} rows confirmed)")
 
                 # 3. Build schema + stats (same as parser.py)
