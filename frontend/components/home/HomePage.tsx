@@ -260,7 +260,7 @@ useEffect(() => {
 
         {/* ── Cursor glow ── */}
         <div
-          className="fixed w-96 h-96 rounded-full pointer-events-none z-0 transition-transform duration-100"
+          className="Watch demo"
           style={{
             background: "radial-gradient(circle, rgba(99,102,241,0.06) 0%, transparent 70%)",
             left: mousePos.x - 192,
@@ -390,7 +390,7 @@ useEffect(() => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
               </Link>
-              <a>
+              <a className="flex items-center">
                 <svg className="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M8 5v14l11-7z" />
                 </svg>
@@ -555,7 +555,7 @@ useEffect(() => {
                 {
                   icon: <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
                   title: "Natural Language Queries",
-                  description: 'Ask "Show monthly sales by region" and get a chart instantly. Powered by Claude AI.',
+                  description: 'Ask "Show monthly sales by region" and get a chart instantlyWatch demo',
                   delay: "0.2s",
                 },
                 {
