@@ -390,9 +390,6 @@ useEffect(() => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
               </Link>
-              
-                href="#demo"
-                className="group text-gray-300 hover:text-white font-medium px-8 py-3.5 rounded-xl border border-gray-800 hover:border-gray-600 transition-all duration-200 flex items-center gap-2 bg-gray-900/50"
               <a>
                 <svg className="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M8 5v14l11-7z" />
